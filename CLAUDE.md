@@ -208,3 +208,166 @@ Wait for consent; never auto-create ADRs. Group related decisions (stacks, authe
 
 ## Code Standards
 See `.specify/memory/constitution.md` for code quality, testing, performance, security, and architecture principles.
+
+## Project Overview
+
+**Objective**: Transform a console application into a modern multi-user web application with persistent storage using the Agentic Dev Stack workflow.
+
+**Development Approach**: Spec-Driven Development (SDD) workflow:
+1. Write specification (`/sp.specify`)
+2. Clarify ambiguities (`/sp.clarify`)
+3. Generate architectural plan (`/sp.plan`)
+4. Break into implementation tasks (`/sp.tasks`)
+5. Implement via Claude Code (no manual coding)
+
+**Project Type**: Full-stack web application with authentication, RESTful API, responsive frontend, and persistent database storage.
+
+## Technology Stack
+
+| Layer | Technology | Version/Details |
+|-------|-----------|-----------------|
+| **Frontend** | Next.js | 16+ (App Router) |
+| **Backend** | Python FastAPI | 0.109+ |
+| **ORM** | SQLModel | 0.0.14+ |
+| **Database** | Neon Serverless PostgreSQL | Async connection via asyncpg 0.29+ |
+| **Authentication** | Better Auth | JWT token-based authentication |
+| **Spec-Driven** | Claude Code + Spec-Kit Plus | Agentic workflow |
+| **Additional** | Pydantic 2.5+, uvicorn 0.27+ | Backend dependencies |
+
+## Specialized Agents
+
+This project uses specialized agents for different aspects of development. Use the appropriate agent based on the task:
+
+### 1. Auth Agent (`auth-security-expert`)
+**Use for**: Authentication and security implementation
+- Implementing user signup/signin flows
+- Integrating Better Auth with JWT tokens
+- Securing API endpoints with authentication middleware
+- Implementing authorization and access control
+- Reviewing authentication systems for security vulnerabilities
+- Password hashing and token management
+
+**When to invoke**:
+```bash
+# When building authentication features
+Task: "Implement user signup and signin using Better Auth"
+→ Use auth-security-expert agent
+
+# When reviewing security
+Task: "Review authentication system for security gaps"
+→ Use auth-security-expert agent
+```
+
+### 2. Frontend Agent (`frontend-nextjs-agent`)
+**Use for**: Next.js frontend development
+- Building responsive UI components
+- Creating page layouts with Next.js App Router
+- Implementing client-side routing and navigation
+- Integrating frontend with backend API
+- State management and data fetching
+- Mobile-first responsive design
+
+**When to invoke**:
+```bash
+# When building UI features
+Task: "Create responsive dashboard layout with Next.js App Router"
+→ Use frontend-nextjs-agent
+
+# When implementing frontend pages
+Task: "Build user registration form with validation"
+→ Use frontend-nextjs-agent
+```
+
+### 3. Database Agent (`neon-db-manager`)
+**Use for**: Database design and operations
+- Designing database schemas for new features
+- Writing and optimizing SQL queries
+- Managing database migrations
+- Setting up Neon Serverless PostgreSQL
+- Troubleshooting database performance issues
+- Defining entity relationships and constraints
+
+**When to invoke**:
+```bash
+# When designing data models
+Task: "Design database schema for user authentication with roles"
+→ Use neon-db-manager agent
+
+# When optimizing queries
+Task: "Optimize slow query performance"
+→ Use neon-db-manager agent
+```
+
+### 4. Backend Agent (`fastapi-backend-developer`)
+**Use for**: FastAPI backend development
+- Building REST API endpoints
+- Implementing request/response validation
+- Connecting authentication flows to backend
+- Managing database operations through FastAPI
+- Implementing business logic and services
+- Error handling and middleware
+
+**When to invoke**:
+```bash
+# When building API endpoints
+Task: "Create FastAPI endpoint for user registration with email validation"
+→ Use fastapi-backend-developer agent
+
+# When integrating authentication
+Task: "Add JWT authentication middleware to FastAPI application"
+→ Use fastapi-backend-developer agent
+```
+
+## Agent Coordination
+
+For features that span multiple layers, coordinate agents in this order:
+
+1. **Database First**: Use `neon-db-manager` to design schema
+2. **Backend Second**: Use `fastapi-backend-developer` to build API endpoints
+3. **Authentication Third**: Use `auth-security-expert` to secure endpoints
+4. **Frontend Last**: Use `frontend-nextjs-agent` to build UI
+
+**Example workflow for "User Registration" feature**:
+```bash
+1. neon-db-manager: Design users table schema
+2. fastapi-backend-developer: Create POST /api/auth/register endpoint
+3. auth-security-expert: Implement Better Auth integration with JWT
+4. frontend-nextjs-agent: Build registration form UI
+```
+
+## Authentication Requirements
+
+**Better Auth Integration**:
+- Better Auth configured to issue JWT (JSON Web Token) tokens on user login
+- JWT tokens used for authenticating API requests
+- Tokens passed in `Authorization: Bearer <token>` header
+- Backend validates JWT tokens on protected endpoints
+- Frontend stores tokens securely and includes in API requests
+
+**Authentication Flow**:
+1. User submits signup/signin form (Frontend)
+2. Frontend calls backend auth endpoint
+3. Backend validates credentials via Better Auth
+4. Better Auth issues JWT token
+5. Frontend stores token (secure storage)
+6. Frontend includes token in subsequent API requests
+7. Backend middleware validates token before processing requests
+
+## Active Technologies
+
+**Current Feature**: 001-backend-api-data (Backend API & Data Layer)
+- Python 3.11+ with FastAPI 0.109+
+- SQLModel 0.0.14+ for ORM
+- asyncpg 0.29+ for async PostgreSQL connection
+- Pydantic 2.5+ for data validation
+- uvicorn 0.27+ for ASGI server
+- Neon Serverless PostgreSQL database
+
+**Upcoming Features**:
+- Next.js 16+ frontend with App Router
+- Better Auth for authentication with JWT tokens
+- Full-stack integration (frontend ↔ backend ↔ database)
+
+## Recent Changes
+- 001-backend-api-data: Added Python 3.11+ + FastAPI 0.109+, SQLModel 0.0.14+, asyncpg 0.29+, pydantic 2.5+, uvicorn 0.27+
+- Updated CLAUDE.md with full-stack technology stack and specialized agent assignments
