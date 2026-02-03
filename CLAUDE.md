@@ -356,6 +356,8 @@ For features that span multiple layers, coordinate agents in this order:
 ## Active Technologies
 - Python 3.11+ (backend), TypeScript/Next.js 16+ (frontend - future integration) (002-auth-user-management)
 - Neon Serverless PostgreSQL (existing from Spec 1, extend with users table) (002-auth-user-management)
+- TypeScript with Next.js 16+ and React 19 + Next.js, Better Auth, React Hook Form, Zod, Tailwind CSS, shadcn/ui, Lucide React, Framer Motion, Sonner (003-frontend-integration)
+- Browser localStorage for JWT tokens and theme preferences (003-frontend-integration)
 
 **Current Feature**: 001-backend-api-data (Backend API & Data Layer)
 - Python 3.11+ with FastAPI 0.109+
