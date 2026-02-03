@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+.next/
+dist/
+out/
+
+# Logs
+*.log
+
+# Environment variables
+.env*
+
+# Next.js
+.next/
+.cache/
+
+# Database
+*.db
+*.db-journal
+
+# System files
+.DS_Store
+Thumbs.db

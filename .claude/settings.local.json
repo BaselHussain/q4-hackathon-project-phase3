@@ -9,7 +9,22 @@
       "Bash(find \"F:\\\\Q4 Hackathon\\\\Project 2 \\(Phase 2\\)\\\\backend\" -type f -name \"*.py\")",
       "Bash(alembic current)",
       "Bash(alembic history)",
-      "Bash(find \"F:\\\\Q4 Hackathon\\\\Project 2 \\(Phase 2\\)\\\\backend\\\\tests\" -name \"conftest.py\")"
+      "Bash(find \"F:\\\\Q4 Hackathon\\\\Project 2 \\(Phase 2\\)\\\\backend\\\\tests\" -name \"conftest.py\")",
+      "Bash(dir \"F:\\\\Q4 Hackathon\\\\Project 2 \\(Phase 2\\)\\\\frontend\\\\styles\")",
+      "Bash(npm install -D prettier eslint-config-prettier eslint-plugin-prettier)",
+      "Bash(npm run dev)",
+      "Bash(dir \"F:\\\\Q4 Hackathon\\\\Project 2 \\(Phase 2\\)\\\\frontend\\\\components\\\\ui\")",
+      "Bash(cd:*)",
+      "Bash(\"F:\\\\Q4 Hackathon\\\\Project 2 \\(Phase 2\\)\\\\frontend\\\\components\\\\ui\\\\label.tsx\")",
+      "Bash(\"F:\\\\Q4 Hackathon\\\\Project 2 \\(Phase 2\\)\\\\frontend\\\\components\\\\ui\\\\skeleton.tsx\")",
+      "Bash(\"F:\\\\Q4 Hackathon\\\\Project 2 \\(Phase 2\\)\\\\frontend\\\\components\\\\ui\\\\textarea.tsx\")",
+      "Bash(\"F:\\\\Q4 Hackathon\\\\Project 2 \\(Phase 2\\)\\\\frontend\\\\components\\\\ui\\\\select.tsx\")",
+      "Bash(\"F:\\\\Q4 Hackathon\\\\Project 2 \\(Phase 2\\)\\\\frontend\\\\components\\\\ui\\\\dialog.tsx\")",
+      "Bash(npm run build:*)",
+      "Bash(find:*)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(node:*)",
+      "Bash(npm install:*)"
     ]
   }
 }
