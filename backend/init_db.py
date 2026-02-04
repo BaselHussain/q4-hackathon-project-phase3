@@ -22,7 +22,8 @@ load_dotenv(Path(__file__).parent / ".env")
 from sqlmodel import SQLModel
 
 from backend.database import engine
-from backend.models import Task, User  # noqa: F401 - Import models to register them with SQLModel
+# Import all models to register them with SQLModel
+from backend.models import Task, User, Conversation, Message  # noqa: F401
 
 
 async def init_db() -> None:

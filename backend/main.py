@@ -22,6 +22,7 @@ from slowapi.errors import RateLimitExceeded
 from routers import tasks
 from schemas import ProblemDetail
 from src.api import auth_router
+from src.api.chat import router as chat_router
 from src.middleware.logging import log_security_event
 
 # Configure logging
@@ -254,6 +255,7 @@ async def log_requests(request: Request, call_next):
 # Include routers
 app.include_router(auth_router)
 app.include_router(tasks.router)
+app.include_router(chat_router)
 
 
 @app.exception_handler(HTTPException)

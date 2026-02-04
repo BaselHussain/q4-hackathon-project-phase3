@@ -25,7 +25,9 @@
       "Bash(npx tsc --noEmit)",
       "Bash(node:*)",
       "Bash(npm install:*)",
-      "Bash(git fetch:*)"
+      "Bash(git fetch:*)",
+      "mcp__context7__resolve-library-id",
+      "Bash(curl:*)"
     ]
   }
 }
