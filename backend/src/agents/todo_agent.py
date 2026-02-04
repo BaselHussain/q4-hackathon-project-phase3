@@ -1,20 +1,27 @@
 """
 Todo Agent using OpenAI Agents SDK.
 
-Configures the AI agent with function tools for task management.
+Configures the AI agent with function tools that wrap the existing
+MCP task operations from Spec 4.
 """
+import sys
 import os
 from typing import Optional
-from uuid import UUID
+
+# Add backend directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from agents import Agent, Runner, function_tool
 from agents.run import RunResult
 
-from src.models.task import Task, TaskStatus
-from database import AsyncSessionLocal
-from sqlmodel import select
-from sqlalchemy.exc import OperationalError
-from datetime import datetime, timezone
+# Import core task operations from Spec 4
+from tools.task_operations import (
+    add_task as core_add_task,
+    list_tasks as core_list_tasks,
+    complete_task as core_complete_task,
+    delete_task as core_delete_task,
+    update_task as core_update_task,
+)
 
 
 # Agent instructions for natural language task management
@@ -38,28 +45,6 @@ Guidelines:
 Remember: You can only manage tasks for the current user. The user_id is provided automatically."""
 
 
-def serialize_task(task: Task) -> dict:
-    """Convert Task model to dictionary."""
-    return {
-        "task_id": str(task.id),
-        "title": task.title,
-        "description": task.description,
-        "status": task.status.value,
-        "created_at": task.created_at.isoformat() if task.created_at else None,
-        "updated_at": task.updated_at.isoformat() if task.updated_at else None,
-    }
-
-
-def success_response(data) -> dict:
-    """Create success response structure."""
-    return {"success": True, "data": data}
-
-
-def error_response(message: str) -> dict:
-    """Create error response structure."""
-    return {"success": False, "error": message}
-
-
 # Store user_id for tool context (set before running agent)
 _current_user_id: Optional[str] = None
 
@@ -77,6 +62,10 @@ def get_current_user() -> str:
     return _current_user_id
 
 
+# =============================================================================
+# Function Tools wrapping MCP Task Operations from Spec 4
+# =============================================================================
+
 @function_tool
 async def add_task(title: str, description: str = None) -> dict:
     """
@@ -89,38 +78,7 @@ async def add_task(title: str, description: str = None) -> dict:
     Returns:
         Success response with created task data, or error response
     """
-    user_id = get_current_user()
-
-    # Validate title
-    if not title or not title.strip():
-        return error_response("Task title is required")
-
-    title = title.strip()
-    if len(title) > 200:
-        return error_response("Task title must be 200 characters or less")
-
-    # Validate description
-    if description is not None:
-        description = description.strip() if description else None
-        if description and len(description) > 2000:
-            return error_response("Task description must be 2000 characters or less")
-
-    try:
-        async with AsyncSessionLocal() as session:
-            new_task = Task(
-                user_id=UUID(user_id),
-                title=title,
-                description=description,
-                status=TaskStatus.PENDING
-            )
-            session.add(new_task)
-            await session.commit()
-            await session.refresh(new_task)
-            return success_response(serialize_task(new_task))
-    except OperationalError:
-        return error_response("Service temporarily unavailable, please try again")
-    except Exception:
-        return error_response("Service temporarily unavailable, please try again")
+    return await core_add_task(get_current_user(), title, description)
 
 
 @function_tool
@@ -134,32 +92,7 @@ async def list_tasks(status: str = "all") -> dict:
     Returns:
         Success response with array of tasks, or error response
     """
-    user_id = get_current_user()
-
-    # Validate status
-    valid_statuses = ["all", "pending", "completed"]
-    status = status.lower() if status else "all"
-    if status not in valid_statuses:
-        return error_response(f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
-
-    try:
-        async with AsyncSessionLocal() as session:
-            query = select(Task).where(Task.user_id == UUID(user_id))
-
-            if status == "pending":
-                query = query.where(Task.status == TaskStatus.PENDING)
-            elif status == "completed":
-                query = query.where(Task.status == TaskStatus.COMPLETED)
-
-            query = query.order_by(Task.created_at.desc())
-            result = await session.execute(query)
-            tasks = result.scalars().all()
-            task_list = [serialize_task(task) for task in tasks]
-            return success_response(task_list)
-    except OperationalError:
-        return error_response("Service temporarily unavailable, please try again")
-    except Exception:
-        return error_response("Service temporarily unavailable, please try again")
+    return await core_list_tasks(get_current_user(), status)
 
 
 @function_tool
@@ -173,30 +106,7 @@ async def complete_task(task_id: str) -> dict:
     Returns:
         Success response with updated task data, or error response
     """
-    user_id = get_current_user()
-
-    # Validate task_id
-    try:
-        task_uuid = UUID(task_id)
-    except (ValueError, TypeError):
-        return error_response("Invalid task ID format")
-
-    try:
-        async with AsyncSessionLocal() as session:
-            task = await session.get(Task, task_uuid)
-
-            if not task or str(task.user_id) != user_id:
-                return error_response("Task not found or access denied")
-
-            task.status = TaskStatus.COMPLETED
-            task.updated_at = datetime.now(timezone.utc)
-            await session.commit()
-            await session.refresh(task)
-            return success_response(serialize_task(task))
-    except OperationalError:
-        return error_response("Service temporarily unavailable, please try again")
-    except Exception:
-        return error_response("Service temporarily unavailable, please try again")
+    return await core_complete_task(get_current_user(), task_id)
 
 
 @function_tool
@@ -210,32 +120,7 @@ async def delete_task(task_id: str) -> dict:
     Returns:
         Success response with confirmation, or error response
     """
-    user_id = get_current_user()
-
-    # Validate task_id
-    try:
-        task_uuid = UUID(task_id)
-    except (ValueError, TypeError):
-        return error_response("Invalid task ID format")
-
-    try:
-        async with AsyncSessionLocal() as session:
-            task = await session.get(Task, task_uuid)
-
-            if not task or str(task.user_id) != user_id:
-                return error_response("Task not found or access denied")
-
-            deleted_task_id = str(task.id)
-            await session.delete(task)
-            await session.commit()
-            return success_response({
-                "task_id": deleted_task_id,
-                "message": "Task deleted successfully"
-            })
-    except OperationalError:
-        return error_response("Service temporarily unavailable, please try again")
-    except Exception:
-        return error_response("Service temporarily unavailable, please try again")
+    return await core_delete_task(get_current_user(), task_id)
 
 
 @function_tool
@@ -251,56 +136,12 @@ async def update_task(task_id: str, title: str = None, description: str = None) 
     Returns:
         Success response with updated task data, or error response
     """
-    user_id = get_current_user()
+    return await core_update_task(get_current_user(), task_id, title, description)
 
-    # Validate task_id
-    try:
-        task_uuid = UUID(task_id)
-    except (ValueError, TypeError):
-        return error_response("Invalid task ID format")
 
-    # Validate at least one field provided
-    has_title = title is not None and title.strip() != ""
-    has_description = description is not None
-
-    if not has_title and not has_description:
-        return error_response("At least one field (title or description) must be provided")
-
-    # Validate title
-    if has_title:
-        title = title.strip()
-        if len(title) > 200:
-            return error_response("Task title must be 200 characters or less")
-        if len(title) < 1:
-            return error_response("Task title must be at least 1 character")
-
-    # Validate description
-    if has_description and description:
-        description = description.strip()
-        if len(description) > 2000:
-            return error_response("Task description must be 2000 characters or less")
-
-    try:
-        async with AsyncSessionLocal() as session:
-            task = await session.get(Task, task_uuid)
-
-            if not task or str(task.user_id) != user_id:
-                return error_response("Task not found or access denied")
-
-            if has_title:
-                task.title = title
-            if has_description:
-                task.description = description if description else None
-
-            task.updated_at = datetime.now(timezone.utc)
-            await session.commit()
-            await session.refresh(task)
-            return success_response(serialize_task(task))
-    except OperationalError:
-        return error_response("Service temporarily unavailable, please try again")
-    except Exception:
-        return error_response("Service temporarily unavailable, please try again")
-
+# =============================================================================
+# Agent Configuration
+# =============================================================================
 
 def create_todo_agent() -> Agent:
     """
