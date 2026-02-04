@@ -1,0 +1,389 @@
+openapi: 3.1.0
+info:
+  title: AI Chat API
+  description: Stateless AI chat endpoint for natural language task management
+  version: 1.0.0
+  contact:
+    name: AI Chat Logic (Spec 5)
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+  - url: https://api.example.com
+    description: Production
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/{user_id}/chat:
+    post:
+      summary: Send chat message
+      description: |
+        Process a natural language message through the AI agent.
+        Creates a new conversation or continues an existing one.
+        Returns AI response with any tool invocations.
+      operationId: sendChatMessage
+      tags:
+        - Chat
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: User UUID (must match authenticated user)
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+            examples:
+              newConversation:
+                summary: Start new conversation
+                value:
+                  message: "Add a task to buy groceries"
+              continueConversation:
+                summary: Continue existing conversation
+                value:
+                  message: "Mark it as done"
+                  conversation_id: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Chat response with AI reply
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponse'
+              examples:
+                taskAdded:
+                  summary: Task created response
+                  value:
+                    conversation_id: "550e8400-e29b-41d4-a716-446655440000"
+                    response: "I've added 'Buy groceries' to your task list."
+                    tool_calls:
+                      - tool_name: "add_task"
+                        arguments:
+                          user_id: "123e4567-e89b-12d3-a456-426614174000"
+                          title: "Buy groceries"
+                        result:
+                          success: true
+                          data:
+                            task_id: "789e0123-e89b-12d3-a456-426614174000"
+                            title: "Buy groceries"
+                            status: "pending"
+        '400':
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              examples:
+                emptyMessage:
+                  value:
+                    type: "invalid-message"
+                    title: "Invalid Message"
+                    status: 400
+                    detail: "Please enter a message"
+                messageTooLong:
+                  value:
+                    type: "message-too-long"
+                    title: "Message Too Long"
+                    status: 400
+                    detail: "Message too long. Please keep under 4000 characters"
+        '401':
+          description: Authentication failed
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          description: Access denied (user_id mismatch)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: Conversation not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              examples:
+                notFound:
+                  value:
+                    type: "conversation-not-found"
+                    title: "Conversation Not Found"
+                    status: 404
+                    detail: "Conversation not found"
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '503':
+          description: Service unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/{user_id}/conversations:
+    get:
+      summary: List user conversations
+      description: Retrieve all conversations for the authenticated user
+      operationId: listConversations
+      tags:
+        - Conversations
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConversationSummary'
+        '401':
+          description: Authentication failed
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          description: Access denied
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/{user_id}/conversations/{conversation_id}:
+    get:
+      summary: Get conversation messages
+      description: Retrieve all messages in a specific conversation
+      operationId: getConversationMessages
+      tags:
+        - Conversations
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Conversation with messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationDetail'
+        '401':
+          description: Authentication failed
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          description: Access denied
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: Conversation not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token from /api/auth/login
+
+  schemas:
+    ChatRequest:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          description: User's natural language message
+          example: "Add a task to buy groceries"
+        conversation_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Optional conversation ID to continue existing conversation
+          example: "550e8400-e29b-41d4-a716-446655440000"
+
+    ChatResponse:
+      type: object
+      required:
+        - conversation_id
+        - response
+        - tool_calls
+      properties:
+        conversation_id:
+          type: string
+          format: uuid
+          description: Conversation identifier (new or existing)
+        response:
+          type: string
+          description: AI assistant's response text
+        tool_calls:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolCall'
+          description: List of tools invoked during response generation
+
+    ToolCall:
+      type: object
+      required:
+        - tool_name
+        - arguments
+        - result
+      properties:
+        tool_name:
+          type: string
+          enum:
+            - add_task
+            - list_tasks
+            - complete_task
+            - delete_task
+            - update_task
+          description: Name of the MCP tool invoked
+        arguments:
+          type: object
+          additionalProperties: true
+          description: Arguments passed to the tool
+        result:
+          type: object
+          additionalProperties: true
+          description: Result returned by the tool
+
+    ConversationSummary:
+      type: object
+      required:
+        - id
+        - created_at
+        - updated_at
+        - message_count
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          nullable: true
+          maxLength: 200
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        message_count:
+          type: integer
+          minimum: 0
+
+    ConversationDetail:
+      type: object
+      required:
+        - id
+        - created_at
+        - updated_at
+        - messages
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+
+    Message:
+      type: object
+      required:
+        - id
+        - role
+        - content
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum:
+            - user
+            - assistant
+            - system
+        content:
+          type: string
+        tool_calls:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolCall'
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    ProblemDetail:
+      type: object
+      description: RFC 7807 Problem Details
+      required:
+        - type
+        - title
+        - status
+        - detail
+      properties:
+        type:
+          type: string
+          description: Error type identifier
+        title:
+          type: string
+          description: Short human-readable title
+        status:
+          type: integer
+          description: HTTP status code
+        detail:
+          type: string
+          description: Detailed error message
+        instance:
+          type: string
+          description: Request path
