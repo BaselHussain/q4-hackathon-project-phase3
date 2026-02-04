@@ -1,11 +1,14 @@
 """
 Stateless MCP tools for task management.
 
-Each tool wraps core operations from task_operations.py.
+Each tool contains the full business logic for its operation.
 Tools are registered with the MCP server via register_tools().
 """
 import sys
 import os
+from datetime import datetime, timezone
+from typing import Optional
+from uuid import UUID
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,15 +17,51 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
 load_dotenv()
 
-# Import core operations
-from tools.task_operations import (
-    add_task as core_add_task,
-    list_tasks as core_list_tasks,
-    complete_task as core_complete_task,
-    delete_task as core_delete_task,
-    update_task as core_update_task,
-)
+from sqlalchemy.exc import OperationalError
+from sqlmodel import select
 
+from database import AsyncSessionLocal
+from src.models.task import Task, TaskStatus
+
+
+# =============================================================================
+# Helper Functions
+# =============================================================================
+
+def validate_uuid(value: str, field_name: str = "ID") -> tuple[bool, Optional[UUID], Optional[dict]]:
+    """Validate that a string is a valid UUID format."""
+    try:
+        uuid_value = UUID(value)
+        return True, uuid_value, None
+    except (ValueError, TypeError):
+        return False, None, error_response(f"Invalid {field_name} format")
+
+
+def serialize_task(task: Task) -> dict:
+    """Convert Task model to JSON-serializable dictionary."""
+    return {
+        "task_id": str(task.id),
+        "title": task.title,
+        "description": task.description,
+        "status": task.status.value,
+        "created_at": task.created_at.isoformat() if task.created_at else None,
+        "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+    }
+
+
+def success_response(data) -> dict:
+    """Create a successful response structure."""
+    return {"success": True, "data": data}
+
+
+def error_response(message: str) -> dict:
+    """Create an error response structure."""
+    return {"success": False, "error": message}
+
+
+# =============================================================================
+# Tool Registration
+# =============================================================================
 
 def register_tools(mcp):
     """
@@ -45,7 +84,42 @@ def register_tools(mcp):
         Returns:
             Success response with created task data, or error response
         """
-        return await core_add_task(user_id, title, description)
+        # Validate user_id format
+        is_valid, user_uuid, err = validate_uuid(user_id, "user_id")
+        if not is_valid:
+            return err
+
+        # Validate title (required, 1-200 chars)
+        if not title or not title.strip():
+            return error_response("Task title is required")
+
+        title = title.strip()
+        if len(title) > 200:
+            return error_response("Task title must be 200 characters or less")
+
+        # Validate description (optional, max 2000 chars)
+        if description is not None:
+            description = description.strip() if description else None
+            if description and len(description) > 2000:
+                return error_response("Task description must be 2000 characters or less")
+
+        # Create task in database
+        try:
+            async with AsyncSessionLocal() as session:
+                new_task = Task(
+                    user_id=user_uuid,
+                    title=title,
+                    description=description,
+                    status=TaskStatus.PENDING
+                )
+                session.add(new_task)
+                await session.commit()
+                await session.refresh(new_task)
+                return success_response(serialize_task(new_task))
+        except OperationalError:
+            return error_response("Service temporarily unavailable, please try again")
+        except Exception:
+            return error_response("Service temporarily unavailable, please try again")
 
     @mcp.tool()
     async def list_tasks(user_id: str, status: str = "all") -> dict:
@@ -59,7 +133,36 @@ def register_tools(mcp):
         Returns:
             Success response with array of tasks, or error response
         """
-        return await core_list_tasks(user_id, status)
+        # Validate user_id format
+        is_valid, user_uuid, err = validate_uuid(user_id, "user_id")
+        if not is_valid:
+            return err
+
+        # Validate status parameter
+        valid_statuses = ["all", "pending", "completed"]
+        status = status.lower() if status else "all"
+        if status not in valid_statuses:
+            return error_response(f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+
+        # Query database
+        try:
+            async with AsyncSessionLocal() as session:
+                query = select(Task).where(Task.user_id == user_uuid)
+
+                if status == "pending":
+                    query = query.where(Task.status == TaskStatus.PENDING)
+                elif status == "completed":
+                    query = query.where(Task.status == TaskStatus.COMPLETED)
+
+                query = query.order_by(Task.created_at.desc())
+                result = await session.execute(query)
+                tasks = result.scalars().all()
+                task_list = [serialize_task(task) for task in tasks]
+                return success_response(task_list)
+        except OperationalError:
+            return error_response("Service temporarily unavailable, please try again")
+        except Exception:
+            return error_response("Service temporarily unavailable, please try again")
 
     @mcp.tool()
     async def complete_task(user_id: str, task_id: str) -> dict:
@@ -73,7 +176,34 @@ def register_tools(mcp):
         Returns:
             Success response with updated task data, or error response
         """
-        return await core_complete_task(user_id, task_id)
+        # Validate user_id format
+        is_valid, user_uuid, err = validate_uuid(user_id, "user_id")
+        if not is_valid:
+            return err
+
+        # Validate task_id format
+        is_valid, task_uuid, err = validate_uuid(task_id, "task_id")
+        if not is_valid:
+            return err
+
+        # Find and update task
+        try:
+            async with AsyncSessionLocal() as session:
+                task = await session.get(Task, task_uuid)
+
+                if not task or task.user_id != user_uuid:
+                    return error_response("Task not found or access denied")
+
+                task.status = TaskStatus.COMPLETED
+                task.updated_at = datetime.now(timezone.utc)
+
+                await session.commit()
+                await session.refresh(task)
+                return success_response(serialize_task(task))
+        except OperationalError:
+            return error_response("Service temporarily unavailable, please try again")
+        except Exception:
+            return error_response("Service temporarily unavailable, please try again")
 
     @mcp.tool()
     async def delete_task(user_id: str, task_id: str) -> dict:
@@ -87,7 +217,35 @@ def register_tools(mcp):
         Returns:
             Success response with confirmation, or error response
         """
-        return await core_delete_task(user_id, task_id)
+        # Validate user_id format
+        is_valid, user_uuid, err = validate_uuid(user_id, "user_id")
+        if not is_valid:
+            return err
+
+        # Validate task_id format
+        is_valid, task_uuid, err = validate_uuid(task_id, "task_id")
+        if not is_valid:
+            return err
+
+        # Find and delete task
+        try:
+            async with AsyncSessionLocal() as session:
+                task = await session.get(Task, task_uuid)
+
+                if not task or task.user_id != user_uuid:
+                    return error_response("Task not found or access denied")
+
+                deleted_task_id = str(task.id)
+                await session.delete(task)
+                await session.commit()
+                return success_response({
+                    "task_id": deleted_task_id,
+                    "message": "Task deleted successfully"
+                })
+        except OperationalError:
+            return error_response("Service temporarily unavailable, please try again")
+        except Exception:
+            return error_response("Service temporarily unavailable, please try again")
 
     @mcp.tool()
     async def update_task(
@@ -108,4 +266,56 @@ def register_tools(mcp):
         Returns:
             Success response with updated task data, or error response
         """
-        return await core_update_task(user_id, task_id, title, description)
+        # Validate user_id format
+        is_valid, user_uuid, err = validate_uuid(user_id, "user_id")
+        if not is_valid:
+            return err
+
+        # Validate task_id format
+        is_valid, task_uuid, err = validate_uuid(task_id, "task_id")
+        if not is_valid:
+            return err
+
+        # Validate at least one field is provided
+        has_title = title is not None and title.strip() != ""
+        has_description = description is not None
+
+        if not has_title and not has_description:
+            return error_response("At least one field (title or description) must be provided")
+
+        # Validate title if provided
+        if has_title:
+            title = title.strip()
+            if len(title) > 200:
+                return error_response("Task title must be 200 characters or less")
+            if len(title) < 1:
+                return error_response("Task title must be at least 1 character")
+
+        # Validate description if provided
+        if has_description and description:
+            description = description.strip()
+            if len(description) > 2000:
+                return error_response("Task description must be 2000 characters or less")
+
+        # Find and update task
+        try:
+            async with AsyncSessionLocal() as session:
+                task = await session.get(Task, task_uuid)
+
+                if not task or task.user_id != user_uuid:
+                    return error_response("Task not found or access denied")
+
+                if has_title:
+                    task.title = title
+                if has_description:
+                    task.description = description if description else None
+
+                task.updated_at = datetime.now(timezone.utc)
+
+                await session.commit()
+                await session.refresh(task)
+                return success_response(serialize_task(task))
+        except OperationalError:
+            return error_response("Service temporarily unavailable, please try again")
+        except Exception:
+            return error_response("Service temporarily unavailable, please try again")

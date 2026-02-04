@@ -42,7 +42,7 @@
 - [x] T006 Update backend/src/models/__init__.py to export Conversation, Message, MessageRole
 - [x] T007 Create ChatRequest and ChatResponse schemas in backend/src/api/schemas/chat.py (per data-model.md)
 - [x] T008 Create chat_service.py in backend/src/services/chat_service.py with conversation CRUD operations
-- [x] T009 Create todo_agent.py in backend/src/agents/todo_agent.py with agent configuration and function tools wrapping MCP operations
+- [x] T009 Create todo_agent.py in backend/src/agents/todo_agent.py with agent configuration using MCPServerStreamableHttp to connect to MCP server (no @function_tool wrappers)
 - [x] T010 Run database migration to create conversations and messages tables
 
 **Checkpoint**: Foundation ready - Models, schemas, service, and agent configured. User story implementation can now begin.

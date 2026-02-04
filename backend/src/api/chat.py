@@ -143,7 +143,7 @@ async def send_chat_message(
                     message=chat_request.message,
                     history=history
                 ),
-                timeout=30.0  # 30 second timeout
+                timeout=45.0  # 45 second timeout (MCP HTTP round-trip adds latency)
             )
         except asyncio.TimeoutError:
             logger.error(f"Agent timeout for user {user_id}")
