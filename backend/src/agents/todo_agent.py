@@ -1,31 +1,26 @@
 """
-Todo Agent using OpenAI Agents SDK.
+Todo Agent using OpenAI Agents SDK with MCP Server integration.
 
-Configures the AI agent with function tools that wrap the existing
-MCP task operations from Spec 4.
+Connects to the MCP server via MCPServerStreamableHttp to discover
+and invoke task management tools. No local @function_tool wrappers —
+all tool calls go through the MCP server endpoint.
 """
-import sys
 import os
-from typing import Optional
+import logging
 
-# Add backend directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-from agents import Agent, Runner, function_tool
+from agents import Agent, Runner
+from agents.mcp import MCPServerStreamableHttp
 from agents.run import RunResult
 
-# Import core task operations from Spec 4
-from tools.task_operations import (
-    add_task as core_add_task,
-    list_tasks as core_list_tasks,
-    complete_task as core_complete_task,
-    delete_task as core_delete_task,
-    update_task as core_update_task,
-)
+logger = logging.getLogger(__name__)
 
+MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "http://localhost:8001/mcp")
 
-# Agent instructions for natural language task management
+# Agent instructions template — {user_id} is injected at runtime
 AGENT_INSTRUCTIONS = """You are a helpful Todo Assistant that helps users manage their tasks through natural language.
+
+CRITICAL: The current user's ID is: {user_id}
+You MUST pass this user_id in EVERY tool call. Never omit it.
 
 Your capabilities:
 - Add new tasks for the user
@@ -42,120 +37,7 @@ Guidelines:
 5. If an operation fails, explain what went wrong in user-friendly terms
 6. You can handle multiple operations in a single message (e.g., "Add task A and mark task B as done")
 
-Remember: You can only manage tasks for the current user. The user_id is provided automatically."""
-
-
-# Store user_id for tool context (set before running agent)
-_current_user_id: Optional[str] = None
-
-
-def set_current_user(user_id: str):
-    """Set the current user ID for tool context."""
-    global _current_user_id
-    _current_user_id = user_id
-
-
-def get_current_user() -> str:
-    """Get the current user ID."""
-    if not _current_user_id:
-        raise ValueError("User ID not set")
-    return _current_user_id
-
-
-# =============================================================================
-# Function Tools wrapping MCP Task Operations from Spec 4
-# =============================================================================
-
-@function_tool
-async def add_task(title: str, description: str = None) -> dict:
-    """
-    Create a new task for the user.
-
-    Args:
-        title: Title of the task (1-200 characters)
-        description: Optional description (max 2000 characters)
-
-    Returns:
-        Success response with created task data, or error response
-    """
-    return await core_add_task(get_current_user(), title, description)
-
-
-@function_tool
-async def list_tasks(status: str = "all") -> dict:
-    """
-    List all tasks for the user with optional status filter.
-
-    Args:
-        status: Filter by status - "all", "pending", or "completed" (default: "all")
-
-    Returns:
-        Success response with array of tasks, or error response
-    """
-    return await core_list_tasks(get_current_user(), status)
-
-
-@function_tool
-async def complete_task(task_id: str) -> dict:
-    """
-    Mark a task as completed.
-
-    Args:
-        task_id: UUID of the task to complete
-
-    Returns:
-        Success response with updated task data, or error response
-    """
-    return await core_complete_task(get_current_user(), task_id)
-
-
-@function_tool
-async def delete_task(task_id: str) -> dict:
-    """
-    Permanently delete a task.
-
-    Args:
-        task_id: UUID of the task to delete
-
-    Returns:
-        Success response with confirmation, or error response
-    """
-    return await core_delete_task(get_current_user(), task_id)
-
-
-@function_tool
-async def update_task(task_id: str, title: str = None, description: str = None) -> dict:
-    """
-    Update a task's title and/or description.
-
-    Args:
-        task_id: UUID of the task to update
-        title: New title for the task (optional, 1-200 characters)
-        description: New description for the task (optional, max 2000 characters)
-
-    Returns:
-        Success response with updated task data, or error response
-    """
-    return await core_update_task(get_current_user(), task_id, title, description)
-
-
-# =============================================================================
-# Agent Configuration
-# =============================================================================
-
-def create_todo_agent() -> Agent:
-    """
-    Create and configure the Todo Agent.
-
-    Returns:
-        Configured Agent instance with all task management tools
-    """
-    return Agent(
-        name="Todo Assistant",
-        instructions=AGENT_INSTRUCTIONS,
-        tools=[add_task, list_tasks, complete_task, delete_task, update_task],
-        model="gpt-4o-mini"  # Cost-effective model for task management
-    )
+Remember: Always include user_id="{user_id}" in every tool call."""
 
 
 async def run_agent(
@@ -164,28 +46,39 @@ async def run_agent(
     history: list[dict] = None
 ) -> RunResult:
     """
-    Run the agent with a user message.
+    Run the agent with a user message via MCP server.
+
+    Opens an MCPServerStreamableHttp connection to the MCP server,
+    creates an Agent that auto-discovers tools, and runs it.
 
     Args:
-        user_id: User ID for tool context
+        user_id: User ID to inject into agent instructions
         message: User's message
         history: Optional conversation history
 
     Returns:
         RunResult with agent response
     """
-    # Set user context for tools
-    set_current_user(user_id)
+    logger.info(f"Connecting to MCP server at {MCP_SERVER_URL}")
 
-    # Create agent
-    agent = create_todo_agent()
+    async with MCPServerStreamableHttp(
+        name="Todo MCP Server",
+        params={"url": MCP_SERVER_URL},
+        cache_tools_list=True,
+        client_session_timeout_seconds=30,
+    ) as server:
+        agent = Agent(
+            name="Todo Assistant",
+            instructions=AGENT_INSTRUCTIONS.format(user_id=user_id),
+            mcp_servers=[server],
+            model="gpt-4o-mini",
+        )
 
-    # Build input messages
-    input_messages = []
-    if history:
-        input_messages.extend(history)
-    input_messages.append({"role": "user", "content": message})
+        # Build input messages
+        input_messages = []
+        if history:
+            input_messages.extend(history)
+        input_messages.append({"role": "user", "content": message})
 
-    # Run agent
-    result = await Runner.run(agent, input_messages)
-    return result
+        result = await Runner.run(agent, input_messages)
+        return result

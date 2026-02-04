@@ -107,7 +107,7 @@ A user wants to retrieve their past conversations or messages within a conversat
 - **FR-002**: System MUST authenticate requests using existing JWT authentication from Phase 2
 - **FR-003**: System MUST verify that the user_id in the URL matches the authenticated user's ID from the JWT token
 - **FR-004**: System MUST use OpenAI Agents SDK to create an AI agent that understands natural language task management commands
-- **FR-005**: System MUST integrate all 5 MCP tools from Spec 4 (add_task, list_tasks, complete_task, delete_task, update_task) into the AI agent
+- **FR-005**: System MUST connect to the MCP server via HTTP using OpenAI Agents SDK's `MCPServerStreamableHttp` to discover and invoke all 5 MCP tools from Spec 4 (add_task, list_tasks, complete_task, delete_task, update_task). The AI agent MUST NOT import tool logic directly — all tool calls go through the MCP server endpoint.
 - **FR-006**: System MUST store all conversations in a `conversations` table with user ownership
 - **FR-007**: System MUST store all messages (user and assistant) in a `messages` table linked to conversations
 - **FR-008**: System MUST fetch full conversation history from database before processing each new message
@@ -119,6 +119,7 @@ A user wants to retrieve their past conversations or messages within a conversat
 - **FR-014**: System MUST maintain zero in-memory conversation state (fully stateless for horizontal scaling)
 - **FR-015**: System MUST configure the AI agent with clear instructions for task management, confirmation of actions, and graceful error handling
 - **FR-016**: System MUST record tool call details (tool name, arguments, result) in the message record
+- **FR-017**: System MUST require a running MCP server at the configured `MCP_SERVER_URL` for AI chat to function. If MCP server is unreachable, return a user-friendly timeout error.
 
 ### Key Entities
 
@@ -151,6 +152,7 @@ A user wants to retrieve their past conversations or messages within a conversat
 - The existing MCP tools from Spec 4 are fully implemented and tested
 - The existing User model and JWT authentication from Phase 2 are available
 - DATABASE_URL environment variable is configured with valid Neon PostgreSQL connection string
+- The MCP server (Spec 4) is running and reachable at `MCP_SERVER_URL` (default: `http://localhost:8001/mcp`) before AI chat requests are processed
 - The AI agent will use GPT-4 or equivalent model capable of function calling
 - Rate limiting will use the same approach as existing auth endpoints (slowapi)
 - Message content is plain text (no file uploads or rich media in this spec)
