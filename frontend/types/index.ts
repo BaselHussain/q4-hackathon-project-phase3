@@ -101,3 +101,18 @@ export interface ApiErrorResponse {
   status: number;
   data?: any;
 }
+
+// Chat types (for ChatKit floating widget)
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  toolCalls: ToolCallResult[] | null;
+  createdAt: string; // ISO 8601 datetime
+}
+
+export interface ToolCallResult {
+  toolName: string; // e.g., "add_task", "list_tasks"
+  arguments: Record<string, unknown>;
+  result: Record<string, unknown>;
+}
