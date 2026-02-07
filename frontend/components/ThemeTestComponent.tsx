@@ -8,8 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import ThemeToggle from '@/components/ThemeToggle';
 
 const ThemeTestComponent: React.FC = () => {
-  const { theme, toggleTheme, setTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme } = useTheme();
   const { getColorForContrast } = useThemeAwareColors();
+
+  // Toggle between light and dark
+  const toggleTheme = () => {
+    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
+  };
 
   // Test accessibility contrast
   const textOnBgColor = getColorForContrast('primary', 'text');
@@ -27,18 +32,19 @@ const ThemeTestComponent: React.FC = () => {
           <div>
             <h3 className="font-medium">Current Theme</h3>
             <p className="text-2xl font-bold capitalize">{theme}</p>
+            <p className="text-sm text-muted-foreground">Resolved: {resolvedTheme}</p>
           </div>
           <div className="flex items-center space-x-2">
             <span className="text-sm text-muted-foreground">System Preference:</span>
             <span className="font-mono bg-background px-2 py-1 rounded text-sm">
-              {window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'}
+              {typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'}
             </span>
           </div>
         </div>
 
         {/* Theme Controls */}
         <div className="flex flex-wrap gap-3">
-          <Button onClick={toggleTheme} variant={theme === 'light' ? 'outline' : 'secondary'}>
+          <Button onClick={toggleTheme} variant={resolvedTheme === 'light' ? 'outline' : 'secondary'}>
             Toggle Theme
           </Button>
           <Button onClick={() => setTheme('light')} variant={theme === 'light' ? 'primary' : 'outline'}>
@@ -46,6 +52,9 @@ const ThemeTestComponent: React.FC = () => {
           </Button>
           <Button onClick={() => setTheme('dark')} variant={theme === 'dark' ? 'primary' : 'outline'}>
             Dark Mode
+          </Button>
+          <Button onClick={() => setTheme('system')} variant={theme === 'system' ? 'primary' : 'outline'}>
+            System
           </Button>
           <ThemeToggle />
         </div>
@@ -93,7 +102,7 @@ const ThemeTestComponent: React.FC = () => {
           <h4 className="font-medium mb-2">System Preference Detection</h4>
           <p className="text-sm text-muted-foreground">
             The theme manager detects your system preference and applies it by default.
-            Current system preference: <span className="font-medium">{window.matchMedia('(prefers-color-scheme: dark)').matches ? 'Dark' : 'Light'}</span>
+            Current system preference: <span className="font-medium">{typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'Dark' : 'Light'}</span>
           </p>
         </div>
       </CardContent>

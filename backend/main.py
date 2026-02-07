@@ -14,7 +14,7 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse, Response
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -24,6 +24,11 @@ from schemas import ProblemDetail
 from src.api import auth_router
 from src.api.chat import router as chat_router
 from src.middleware.logging import log_security_event
+
+# ChatKit imports
+from app.chatkit_server import AppChatKitServer
+from app.chatkit_store import MemoryStore
+from chatkit.server import StreamingResult
 
 # Configure logging
 logging.basicConfig(
@@ -161,6 +166,10 @@ app.openapi = custom_openapi
 # Add rate limiter to app state
 app.state.limiter = limiter
 
+# Initialize ChatKit server
+chatkit_store = MemoryStore()
+chatkit_server = AppChatKitServer(chatkit_store)
+
 # T039: Custom RFC 7807 error handler for rate limit exceeded
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
@@ -256,6 +265,68 @@ async def log_requests(request: Request, call_next):
 app.include_router(auth_router)
 app.include_router(tasks.router)
 app.include_router(chat_router)
+
+
+# ChatKit CORS preflight
+@app.options("/chatkit")
+async def chatkit_options():
+    """Handle CORS preflight requests for ChatKit endpoint"""
+    return Response(status_code=200)
+
+
+# ChatKit endpoint with JWT auth
+@app.post("/chatkit")
+async def chatkit_endpoint(request: Request):
+    """
+    ChatKit endpoint that processes all ChatKit requests.
+    Extracts JWT for user identification, delegates to ChatKitServer.
+    """
+    try:
+        # Extract user_id from JWT
+        user_id = "anonymous"
+        auth_header = request.headers.get("authorization", "")
+        logger.info(f"ChatKit request - Authorization header present: {bool(auth_header)}")
+
+        if auth_header.startswith("Bearer "):
+            token = auth_header.replace("Bearer ", "")
+            try:
+                from src.core.security import decode_access_token
+                payload, error = decode_access_token(token)
+                if payload:
+                    user_id = payload.get("sub", "anonymous")
+                    logger.info(f"ChatKit request - Extracted user_id from JWT: {user_id}")
+                else:
+                    logger.warning(f"JWT validation failed: {error}")
+            except Exception as e:
+                logger.warning(f"JWT decode failed: {e}")
+        else:
+            logger.warning(f"ChatKit request - No valid Bearer token found")
+
+        # Get raw request body - ChatKit handles validation
+        payload = await request.body()
+
+        # Process request through ChatKit server
+        result = await chatkit_server.process(
+            payload,
+            {"request": request, "user_id": user_id}
+        )
+
+        # Return appropriate response type
+        if isinstance(result, StreamingResult):
+            return StreamingResponse(result, media_type="text/event-stream")
+
+        if hasattr(result, "json"):
+            return Response(content=result.json, media_type="application/json")
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ChatKit endpoint error: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"ChatKit processing error: {str(e)}")
 
 
 @app.exception_handler(HTTPException)

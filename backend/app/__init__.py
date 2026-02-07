@@ -1,0 +1,3 @@
+"""
+ChatKit application package.
+"""

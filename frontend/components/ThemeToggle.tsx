@@ -6,20 +6,27 @@ import { Moon, Sun } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const ThemeToggle: React.FC = () => {
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme } = useTheme();
+
+  const toggleTheme = () => {
+    setTheme(theme === 'light' ? 'dark' : 'light');
+  };
+
+  // Use resolvedTheme for actual current theme (handles 'system' properly)
+  const currentTheme = resolvedTheme || theme;
 
   return (
     <button
       onClick={toggleTheme}
-      aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+      aria-label={`Switch to ${currentTheme === 'light' ? 'dark' : 'light'} mode`}
       className="relative rounded-full p-2 transition-all duration-200 hover:bg-gray-200 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
     >
       <motion.div
-        animate={{ rotate: theme === 'light' ? 0 : 180 }}
+        animate={{ rotate: currentTheme === 'light' ? 0 : 180 }}
         transition={{ duration: 0.3, ease: 'easeInOut' }}
         className="flex h-6 w-6 items-center justify-center"
       >
-        {theme === 'light' ? (
+        {currentTheme === 'light' ? (
           <Sun
             className="h-5 w-5 text-gray-800 dark:text-gray-200"
             aria-hidden="true"
